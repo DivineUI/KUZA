@@ -7,7 +7,6 @@ const FLOW = {
   'buyer-collects': ['Deposit pending verification', 'Deposit paid', 'Farmer confirmed', 'Harvested', 'Collected by buyer', 'Completed']
 };
 
-// Talks to the server. Throws an Error with the server's message if something fails.
 async function api(path, o = {}) {
   const r = await fetch('/api/' + path, {
     method: o.method || (o.body ? 'POST' : 'GET'),
@@ -29,7 +28,6 @@ function toast(msg, bad) {
   toast.t = setTimeout(() => t.className = '', 3200);
 }
 
-// The delivery timeline for an order
 function timeline(m) {
   if (m.status === 'Cancelled')
     return `<span class="badge no">Cancelled${m.depositOutcome ? ' · deposit: ' + esc(m.depositOutcome.toLowerCase()) : ''}</span>`;
@@ -40,7 +38,6 @@ function timeline(m) {
 const historyHtml = m => `<details class="hist"><summary>History</summary>${(m.history || []).map(e =>
   `<div>${new Date(e.at).toLocaleString()} · ${esc(e.status)}${e.kg ? ' · ' + esc(e.kg) + ' kg' : ''}${e.note ? ' · ' + esc(e.note) : ''}</div>`).join('')}</details>`;
 
-// A small pop-up form. Returns the typed values, or null if cancelled.
 function ask(title, fields, okText = 'Save') {
   return new Promise(resolve => {
     const m = document.createElement('div');
@@ -56,7 +53,7 @@ function ask(title, fields, okText = 'Save') {
   });
 }
 
-// Builds the header and footer, checks who is signed in, and redirects if the page needs a role.
+// Builds the header, injects global language selector & AI widget
 async function boot(roles) {
   let me = null, down = false;
   try { me = (await api('me')).user; } catch (e) { down = true; }
@@ -71,17 +68,48 @@ async function boot(roles) {
   if (me && me.role === 'agent') links.push(['agent.html', 'Quality checks']);
   if (me && me.role === 'farmer') links.push(['profile.html', 'My profile']);
 
+  // Header with language selector included
   $('#hdr').innerHTML = `<header><div class="wrap bar"><a class="logo" href="index.html"><i>K</i>KUZA</a>
     <nav>${links.map(l => `<a href="${l[0]}" class="${l[0] === here ? 'on' : ''}">${l[1]}</a>`).join('')}</nav>
-    <div class="who">${me ? `<span>${esc(me.name)}</span><button class="btn ghost sm" id="out">Log out</button>`
-      : `<a class="btn ghost sm" href="login.html">Log in</a><a class="btn sm" href="login.html?mode=register">Get started</a>`}</div></div></header>`;
+    <div style="display:flex; align-items:center; gap:12px;">
+      <select id="langSelect" onchange="setLanguage(this.value)" style="padding:4px 8px; border-radius:6px; border:1px solid #ccc;">
+        <option value="en">English</option>
+        <option value="rw">Kinyarwanda</option>
+      </select>
+      <div class="who">${me ? `<span>${esc(me.name)}</span><button class="btn ghost sm" id="out">Log out</button>`
+      : `<a class="btn ghost sm" href="login.html">Log in</a><a class="btn sm" href="login.html?mode=register">Get started</a>`}</div>
+    </div></div></header>`;
 
   $('#ftr').innerHTML = `<footer><div class="wrap row"><span><b>KUZA</b> &nbsp; Fresh tomatoes, planned before harvest. Rwanda.</span><span>© 2026 KUZA</span></div></footer>`;
+
+  // Inject AI Chatbot Widget into the page dynamically if it doesn't exist yet
+  if (!document.getElementById("ai-chat-widget")) {
+    const chatDiv = document.createElement("div");
+    chatDiv.id = "ai-chat-widget";
+    chatDiv.style.cssText = "position: fixed; bottom: 20px; right: 20px; z-index: 999; font-family: sans-serif;";
+    chatDiv.innerHTML = `
+      <div id="ai-chat-box" style="display:none; width:320px; height:400px; background:white; border-radius:12px; box-shadow:0 5px 25px rgba(0,0,0,0.2); flex-direction:column; overflow:hidden; border:1px solid #e5e7eb; margin-bottom:10px;">
+        <div style="background:#16a34a; color:white; padding:12px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+          <span data-i18n="chatHeader">KUZA Assistant</span>
+          <button onclick="toggleChat()" style="background:none; border:none; color:white; font-size:16px; cursor:pointer;">&times;</button>
+        </div>
+        <div id="ai-chat-messages" style="flex:1; padding:12px; overflow-y:auto; font-size:14px; display:flex; flex-direction:column; gap:8px; background:#f9fafb;">
+          <div class="chat-msg ai" data-i18n="chatWelcome">Hello! How can I help you with KUZA today?</div>
+        </div>
+        <div style="display:flex; border-top:1px solid #e5e7eb; padding:8px; background:white;">
+          <input type="text" id="ai-chat-input" placeholder="Ask a question..." onkeypress="handleChatKey(event)" style="flex:1; padding:8px; border:1px solid #d1d5db; border-radius:6px; outline:none; font-size:14px;">
+          <button onclick="sendChat()" style="background:#16a34a; color:white; border:none; padding:8px 12px; margin-left:6px; border-radius:6px; cursor:pointer; font-weight:bold;" data-i18n="chatSend">Send</button>
+        </div>
+      </div>
+      <button onclick="toggleChat()" style="background:#16a34a; color:white; border:none; border-radius:50px; padding:12px 20px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.15); cursor:pointer; display:flex; align-items:center; gap:8px;">💬 <span data-i18n="chatBtnText">AI Assistant</span></button>
+    `;
+    document.body.appendChild(chatDiv);
+  }
 
   if (down) {
     const n = document.createElement('div');
     n.className = 'wrap note bad';
-    n.innerHTML = '<b>Cannot reach the KUZA server.</b> Open this site through the running server (http://localhost:3000), not by double-clicking the HTML file, and check that <code>npm start</code> is still running.';
+    n.innerHTML = '<b>Cannot reach the KUZA server.</b> Check that <code>npm start</code> is running.';
     $('#hdr').after(n);
   }
   const out = $('#out');
@@ -96,15 +124,13 @@ async function boot(roles) {
   return me;
 }
 
-// ---------- Added: approval notice, photo resizing, location pickers ----------
 function statusBanner(me) {
   if (!me || me.role === 'ops' || me.status === 'approved') return '';
   return me.status === 'rejected'
-    ? `<div class="note bad"><b>Your application was not approved.</b> ${esc(me.rejectionReason || '')} Please contact KUZA if you think this is a mistake.</div>`
-    : '<div class="note"><b>Your account is under review.</b> KUZA will check your details and confirm before you can start transacting. You can browse in the meantime.</div>';
+    ? `<div class="note bad"><b>Your application was not approved.</b> ${esc(me.rejectionReason || '')} Please contact KUZA.</div>`
+    : '<div class="note"><b>Your account is under review.</b> KUZA will check your details before you can transact.</div>';
 }
 
-// Shrinks a photo in the browser so uploads stay small.
 function shrink(file, max = 1200, maxBytes = 650 * 1024) {
   return new Promise((resolve, reject) => {
     const img = new Image(), url = URL.createObjectURL(file);
@@ -121,14 +147,13 @@ function shrink(file, max = 1200, maxBytes = 650 * 1024) {
         }
         side = Math.round(side * 0.75);
       }
-      reject(new Error('This photo is too large even after shrinking. Please choose a smaller one.'));
+      reject(new Error('This photo is too large.'));
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('One of the files is not a readable image.')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unreadable image file.')); };
     img.src = url;
   });
 }
 
-// Province > district > sector (> cell) pickers.
 async function initPlaces(ids) {
   const places = await (await fetch('rwanda.json')).json();
   const el = k => ids[k] && document.getElementById(ids[k]);
@@ -228,18 +253,18 @@ async function sendChat() {
   const message = inputField.value.trim();
   if (!message) return;
 
-  // Append user message
   const userMsgDiv = document.createElement("div");
   userMsgDiv.className = "chat-msg user";
+  userMsgDiv.style.cssText = "padding: 8px 12px; border-radius: 8px; max-width: 80%; line-height: 1.4; background: #dcfce7; align-self: flex-end; color: #166534;";
   userMsgDiv.innerText = message;
   messagesArea.appendChild(userMsgDiv);
 
   inputField.value = "";
   messagesArea.scrollTop = messagesArea.scrollHeight;
 
-  // Append loading placeholder
   const loadingDiv = document.createElement("div");
   loadingDiv.className = "chat-msg ai";
+  loadingDiv.style.cssText = "padding: 8px 12px; border-radius: 8px; max-width: 80%; line-height: 1.4; background: #e5e7eb; align-self: flex-start; color: #1f2937;";
   loadingDiv.innerText = "...";
   messagesArea.appendChild(loadingDiv);
   messagesArea.scrollTop = messagesArea.scrollHeight;
