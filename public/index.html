@@ -1,22 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KUZA – Fresh Produce. Reliable Buyers. Smarter Delivery.</title>
+  <title data-i18n="title">KUZA – Fresh Produce. Reliable Buyers. Smarter Delivery.</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Simple styling for language switcher and floating AI chat widget */
+    .top-bar-lang {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      z-index: 100;
+    }
+
+    .top-bar-lang select {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #ai-chat-widget {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999;
+      font-family: sans-serif;
+    }
+
+    #ai-chat-btn {
+      background: #16a34a;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 12px 20px;
+      font-weight: bold;
+      cursor: box;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #ai-chat-box {
+      display: none;
+      width: 320px;
+      height: 400px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      margin-bottom: 10px;
+    }
+
+    #ai-chat-header {
+      background: #16a34a;
+      color: white;
+      padding: 12px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #ai-chat-messages {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #f9fafb;
+    }
+
+    #ai-chat-input-area {
+      display: flex;
+      border-top: 1px solid #e5e7eb;
+      padding: 8px;
+      background: white;
+    }
+
+    #ai-chat-input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      outline: none;
+      font-size: 14px;
+    }
+
+    #ai-chat-send {
+      background: #16a34a;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      margin-left: 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .chat-msg {
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 80%;
+      line-height: 1.4;
+    }
+
+    .chat-msg.user {
+      background: #dcfce7;
+      align-self: flex-end;
+      color: #166534;
+    }
+
+    .chat-msg.ai {
+      background: #e5e7eb;
+      align-self: flex-start;
+      color: #1f2937;
+    }
+  </style>
 </head>
+
 <body>
+
+  <!-- Language Switcher Top Bar -->
+  <div class="top-bar-lang">
+    <select id="langSelect" onchange="setLanguage(this.value)">
+      <option value="en">English</option>
+      <option value="rw">Kinyarwanda</option>
+    </select>
+  </div>
+
   <div id="hdr"></div>
 
   <section class="hero">
     <div class="wrap">
       <div>
-        <span class="pill">Tomatoes first, in Rwanda</span>
-        <h1>Fresh Produce. Reliable Buyers. Smarter Delivery.</h1>
-        <p class="lead">KUZA connects farmers with businesses that need fresh produce, before harvest, and coordinates the storage and transport to get it there.</p>
-        <a class="btn amb" href="buyer.html">Find tomatoes</a>
-        <a class="btn glass" href="login.html?mode=register&role=farmer">I am a farmer</a>
+        <span class="pill" data-i18n="pill">Tomatoes first, in Rwanda</span>
+        <h1 data-i18n="heroTitle">Fresh Produce. Reliable Buyers. Smarter Delivery.</h1>
+        <p class="lead" data-i18n="heroLead">KUZA connects farmers with businesses that need fresh produce, before
+          harvest, and coordinates the storage and transport to get it there.</p>
+        <a class="btn amb" href="buyer.html" data-i18n="btnTomatoes">Find tomatoes</a>
+        <a class="btn glass" href="login.html?mode=register&role=farmer" data-i18n="btnFarmer">I am a farmer</a>
       </div>
       <img class="photo" src="images/hero.jpg" alt="Ripe tomatoes on the vine">
     </div>
@@ -24,79 +157,59 @@
 
   <section class="s">
     <div class="wrap">
-      <h2>How KUZA works</h2>
-      <p class="muted">Tomatoes spoil fast. KUZA finds the buyer while the crop is still growing.</p>
+      <h2 data-i18n="howWorksTitle">How KUZA works</h2>
+      <p class="muted" data-i18n="howWorksSub">Tomatoes spoil fast. KUZA finds the buyer while the crop is still
+        growing.</p>
       <div class="steps">
-        <div class="card step"><div class="n">1</div><h3>Farmers forecast</h3><p class="muted">Tell us how much you expect, where, and when it will be ready.</p></div>
-        <div class="card step"><div class="n">2</div><h3>Buyers commit</h3><p class="muted">Businesses reserve a quantity at an agreed price with a deposit.</p></div>
-        <div class="card step"><div class="n">3</div><h3>Farmers confirm</h3><p class="muted">The day before harvest, the final quantity is confirmed.</p></div>
-        <div class="card step"><div class="n">4</div><h3>KUZA delivers</h3><p class="muted">Storage and transport are coordinated, and every handover is recorded.</p></div>
+        <div class="card step">
+          <div class="n">1</div>
+          <h3 data-i18n="step1Title">Farmers forecast</h3>
+          <p class="muted" data-i18n="step1Desc">Tell us how much you expect, where, and when it will be ready.</p>
+        </div>
+        <div class="card step">
+          <div class="n">2</div>
+          <h3 data-i18n="step2Title">Buyers commit</h3>
+          <p class="muted" data-i18n="step2Desc">Businesses reserve a quantity at an agreed price with a deposit.</p>
+        </div>
+        <div class="card step">
+          <div class="n">3</div>
+          <h3 data-i18n="step3Title">Farmers confirm</h3>
+          <p class="muted" data-i18n="step3Desc">The day before harvest, the final quantity is confirmed.</p>
+        </div>
+        <div class="card step">
+          <div class="n">4</div>
+          <h3 data-i18n="step4Title">KUZA delivers</h3>
+          <p class="muted" data-i18n="step4Desc">Storage and transport are coordinated, and every handover is recorded.
+          </p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="s tint">
-    <div class="wrap split">
-      <img src="images/hands.jpg" alt="A farmer holding freshly picked tomatoes">
-      <div class="txt">
-        <h2>For farmers</h2>
-        <p class="muted">Know where your tomatoes are going before you pick them.</p>
-        <ul class="ticks">
-          <li>Forecast your harvest by province, district, sector and cell</li>
-          <li>Buyers reserve your tomatoes ahead of time</li>
-          <li>Confirm your final quantity one day before harvest</li>
-          <li>Less produce left in the field with nowhere to go</li>
-        </ul>
-        <p style="margin-top:22px"><a class="btn" href="login.html?mode=register&role=farmer">Forecast a harvest</a></p>
+  <!-- Floating AI Chatbot Widget -->
+  <div id="ai-chat-widget">
+    <div id="ai-chat-box">
+      <div id="ai-chat-header">
+        <span data-i18n="chatHeader">KUZA Assistant</span>
+        <button onclick="toggleChat()"
+          style="background:none; border:none; color:white; font-size:16px; cursor:pointer;">&times;</button>
+      </div>
+      <div id="ai-chat-messages">
+        <div class="chat-msg ai" data-i18n="chatWelcome">Hello! How can I help you with KUZA today?</div>
+      </div>
+      <div id="ai-chat-input-area">
+        <input type="text" id="ai-chat-input" placeholder="Ask a question..." onkeypress="handleChatKey(event)">
+        <button id="ai-chat-send" onclick="sendChat()" data-i18n="chatSend">Send</button>
       </div>
     </div>
-  </section>
-
-  <section class="s">
-    <div class="wrap split rev">
-      <img src="images/cold.jpg" alt="A clean cold storage room with shelving">
-      <div class="txt">
-        <h2>Storage and transport, handled</h2>
-        <p class="muted">If tomatoes cannot wait on the farm, KUZA arranges temporary cold storage. Buyers can have transport coordinated for them, or collect the produce themselves.</p>
-        <ul class="ticks">
-          <li>Temporary storage when a harvest is ready before delivery</li>
-          <li>Transport coordinated by KUZA, priced separately from the produce</li>
-          <li>A clear delivery timeline for farmer, buyer and KUZA</li>
-          <li>Quantities and handovers recorded at every stage</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <section class="s tint">
-    <div class="wrap split">
-      <img src="images/crates.jpg" alt="Crates of fresh red tomatoes">
-      <div class="txt">
-        <h2>For buyers</h2>
-        <p class="muted">Restaurants, hotels, retailers and traders get a reliable supply they can plan around.</p>
-        <ul class="ticks">
-          <li>See upcoming harvests by location, quality and date</li>
-          <li>Reserve the quantity you need with a deposit</li>
-          <li>Track your order from confirmation to delivery</li>
-          <li>Confirm receipt to close the order</li>
-        </ul>
-        <p style="margin-top:22px"><a class="btn" href="buyer.html">Browse harvests</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section class="s">
-    <div class="wrap">
-      <div class="cta">
-        <h2>Fresh produce, planned ahead</h2>
-        <p>Join KUZA as a farmer or a buyer and put every harvest on the right truck.</p>
-        <a class="btn amb" href="login.html?mode=register">Create an account</a>
-      </div>
-    </div>
-  </section>
+    <button id="ai-chat-btn" onclick="toggleChat()">💬 <span data-i18n="chatBtnText">AI Assistant</span></button>
+  </div>
 
   <div id="ftr"></div>
   <script src="common.js"></script>
-  <script>boot();</script>
+  <script>
+    if (typeof boot === 'function') boot();
+  </script>
 </body>
+
 </html>
