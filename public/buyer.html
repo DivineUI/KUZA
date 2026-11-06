@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUZA – Marketplace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="wrap dash">
+    <h1 style="font-size:clamp(28px,4vw,40px)">Tomato harvests coming soon</h1>
+    <p class="muted">Reserve a quantity before harvest. A deposit secures your order.</p>
+    <div id="banner"></div>
+    <div class="tabs" id="tabs"><button data-t="market" class="on">Available harvests</button><button data-t="orders" id="ordersTab" style="display:none">My orders</button></div>
+
+    <section id="market">
+      <label style="max-width:320px">Filter by province</label>
+      <select id="filter" style="max-width:320px;margin-bottom:22px"></select>
+      <div class="grid" id="list"></div>
+    </section>
+    <section id="orders" style="display:none"><div class="stack" id="olist"></div></section>
+  </main>
+  <div id="ftr"></div>
+  <script src="common.js"></script>
+  <script>
+(async () => {
+  const me = await boot();
+  const IMGS = ['images/crates.jpg', 'images/hands.jpg', 'images/hero.jpg'];
+  let harvests = [], settings = { depositPercent: 20 };
+  const isBuyer = me && me.role === 'buyer', canOrder = isBuyer && me.status === 'approved';
+  $('#banner').innerHTML = statusBanner(me);
+  if (isBuyer) $('#ordersTab').style.display = '';
+
+  function tab(t) {
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    $('#market').style.display = t === 'market' ? '' : 'none';
+    $('#orders').style.display = t === 'orders' ? '' : 'none';
+    if (t === 'orders') loadOrders();
+  }
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => tab(b.dataset.t));
+
+  // ---------- Harvest cards ----------
+  async function load() {
+    [harvests, settings] = await Promise.all([api('harvests'), api('settings')]);
+    // Every province and district is always listed, whether or not farmers are registered there yet
+    let places = {};
+    try { places = await (await fetch('rwanda.json')).json(); } catch (e) { }
+    const dist = $('#dist') || $('#filter').insertAdjacentElement('afterend', Object.assign(document.createElement('select'), { id: 'dist' })) && $('#dist');
+    $('#filter').innerHTML = '<option value="">All provinces</option>' + Object.keys(places).map(p => `<option>${esc(p)}</option>`).join('');
+    const fillDist = () => dist.innerHTML = '<option value="">All districts</option>' + Object.keys(places[$('#filter').value] || {}).map(d => `<option>${esc(d)}</option>`).join('');
+    fillDist();
+    $('#filter').onchange = () => { fillDist(); show(); }; dist.onchange = show;
+    show();
+  }
+  function show() {
+    const list = harvests.filter(h => h.remainingKg > 0 && h.status !== 'Harvested' && (!$('#filter').value || h.province === $('#filter').value) && (!$('#dist').value || h.district === $('#dist').value));
+    $('#list').innerHTML = list.length ? list.map((h, i) => `<div class="card">
+      <img class="pic" src="${IMGS[i % IMGS.length]}" alt="Tomatoes">
+      <div class="row"><h3>${esc(h.remainingKg)} kg available</h3><span class="tag">${esc(h.verified ? h.verified.grade : h.quality)}</span></div>
+      <div style="margin:4px 0">${h.verified && h.verified.grade !== 'Rejected' ? '<span class="badge ok">Checked by certified agent</span> ' : '<span class="badge">Quality not yet checked</span> '}${h.status === 'In cold storage' ? '<span class="badge ok">Ready now · in cold room</span> ' : ''}<span class="tag">Farmer trust ${esc(h.trust)}/100</span></div>
+      ${h.askingPrice ? `<div class="price">${rwf(h.askingPrice)} <small>per kg asking</small></div>` : ''}
+      <div class="meta">${esc(h.location)}</div><div class="meta">${h.status === 'In cold storage' ? 'Stored at ' + esc((h.storage || {}).facility) : 'Expected harvest: ' + esc(h.harvestDate)}</div><div class="meta">Farmer: ${esc(h.farmerName)}</div>
+      <button class="btn wide" style="margin-top:14px" data-id="${h.id}" ${me && !canOrder ? 'disabled' : ''}>${me && !isBuyer ? 'Sign in as a buyer to order' : me && !canOrder ? 'Available once approved' : 'Reserve tomatoes'}</button></div>`).join('')
+      : '<div class="card empty" style="grid-column:1/-1">No harvests available right now. Please check back soon.</div>';
+  }
+
+  // ---------- Order form ----------
+  $('#list').onclick = e => {
+    const b = e.target.closest('[data-id]'); if (!b || b.disabled) return;
+    if (!me) return location.href = 'login.html?mode=register&role=buyer&next=buyer.html';
+    openOrder(harvests.find(h => h.id === +b.dataset.id));
+  };
+
+  function openOrder(h) {
+    const m = document.createElement('div');
+    m.className = 'modal';
+    m.innerHTML = `<form class="card"><h3>Reserve tomatoes</h3><p class="meta">${esc(h.location)} · ${esc(h.remainingKg)} kg available · harvest ${esc(h.harvestDate)}</p>
+      <label>Quantity (kg)</label><input name="quantityKg" type="number" min="1" max="${h.remainingKg}" value="${Math.min(100, h.remainingKg)}" required>
+      <label>Agreed price per kg (RWF)</label><input name="pricePerKg" type="number" min="1" value="${h.askingPrice || ''}" required>
+      <label>Transport</label><select name="transport"><option value="cold-solutions">KUZA arranges transport</option><option value="buyer-collects">I will collect it myself</option></select>
+      <div class="sum" id="sum"></div>
+      <p class="meta" style="margin:10px 0 4px"><b>Step 1.</b> Send the deposit by Mobile Money to <b>${esc(settings.momoNumber || '0790322955')}</b>. It is <b>non-refundable</b> if you cancel.</p>
+      <label>Step 2. Upload your payment proof (screenshot or photo)</label>
+      <input name="proofFile" type="file" accept="image/*" required><div class="err" id="oerr"></div>
+      <div class="actions"><button class="btn">Place order</button><button type="button" class="btn ghost" id="x">Cancel</button></div></form>`;
+    document.body.appendChild(m);
+    const f = m.querySelector('form');
+    const sum = () => {
+      const q = +f.quantityKg.value || 0, p = +f.pricePerKg.value || 0, t = q * p;
+      m.querySelector('#sum').innerHTML = `<div><span>Produce total</span><span>${rwf(t)}</span></div>
+        <div><span>Non-refundable deposit (${settings.depositPercent}%)</span><span>${rwf(Math.round(t * settings.depositPercent / 100))}</span></div>
+        <div class="t"><span>Transport fee</span><span>${f.transport.value === 'buyer-collects' ? 'None' : 'Confirmed by KUZA'}</span></div>`;
+    };
+    f.oninput = sum; sum();
+    m.querySelector('#x').onclick = () => m.remove();
+    f.onsubmit = async e => {
+      e.preventDefault();
+      try {
+        const body = Object.fromEntries(new FormData(f)); body.harvestId = h.id;
+        body.paymentProof = await shrink(f.proofFile.files[0]); delete body.proofFile;
+        await api('matches', { body });
+        m.remove(); toast('Order placed. KUZA will verify your payment proof.');
+        await load(); tab('orders');
+      } catch (err) { m.querySelector('#oerr').textContent = err.message; }
+    };
+  }
+
+  // ---------- My orders ----------
+  async function loadOrders() {
+    const orders = await api('matches');
+    $('#olist').innerHTML = orders.length ? orders.map(m => {
+      const f = FLOW[m.transport], delivered = m.status === f[f.length - 2], closed = ['Completed', 'Cancelled'].includes(m.status) || delivered;
+      return `<div class="card"><div class="row"><div><h3>${esc(m.quantityKg)} kg tomatoes</h3>
+        <div class="meta">${esc(m.location)} · farmer ${esc(m.farmerName)} · harvest ${esc(m.harvestDate)}</div>
+        <div class="meta">${rwf(m.totalValue)} produce · deposit ${rwf(m.depositAmount)}${m.depositSurplus > 0 ? ` (RWF ${Number(m.depositSurplus).toLocaleString('en-US')} of your payment is surplus)` : ''} · ${m.transport === 'buyer-collects' ? 'you collect' : 'KUZA transport'}</div></div>
+        <span class="badge ${m.status === 'Completed' ? 'ok' : ''}">${esc(m.status)}</span></div>
+        ${timeline(m)}
+        ${m.status === 'Deposit pending verification' ? `<p class="meta">Your proof of the <b>${rwf(m.depositAmount)}</b> deposit is waiting for KUZA to verify it.</p>` : ''}
+        <div class="actions">
+          ${delivered ? `<button class="btn amb" data-a="received" data-id="${m.id}">Confirm produce received &amp; payment</button>` : ''}
+          ${closed ? '' : `<button class="btn ghost" data-a="cancel" data-id="${m.id}">Cancel order</button>`}
+        </div>${historyHtml(m)}</div>`;
+    }).join('') : '<div class="card empty">You have no orders yet.<br><br><button class="btn" onclick="document.querySelector(\'[data-t=market]\').click()">Browse harvests</button></div>';
+  }
+  $('#olist').onclick = async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    try {
+      if (b.dataset.a === 'received') {
+        await api(`matches/${b.dataset.id}/received`, { body: {} });
+        toast('Thank you. Your order is complete.');
+      } else {
+        const v = await ask('Cancel this order?', [{ label: 'Reason (optional)', name: 'reason' }], 'Cancel order');
+        if (!v) return;
+        await api(`matches/${b.dataset.id}/cancel`, { body: { reason: v.reason } });
+        toast('Order cancelled.');
+      }
+      loadOrders(); load();
+    } catch (err) { toast(err.message, true); }
+  };
+
+  await load();
+  if (isBuyer && location.hash === '#orders') tab('orders');
+})();
+  </script>
+</body>
+</html>

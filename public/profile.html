@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUZA – My profile</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="wrap dash">
+    <h1 style="font-size:clamp(28px,4vw,40px)">My profile</h1>
+    <p class="muted">Keep your harvest estimates up to date so buyers and KUZA can plan.</p>
+    <div id="banner"></div>
+    <div class="card" style="max-width:520px">
+      <form id="form">
+        <label>Name</label>
+        <input id="name" disabled>
+        <label>Email</label>
+        <input id="email" disabled>
+        <label>Location</label>
+        <input id="loc" disabled>
+        <label>Phone number</label>
+        <input name="phone" type="tel" required>
+        <label>Send me updates by</label>
+        <select name="channel"><option value="email">Email</option><option value="sms">Phone (SMS)</option></select>
+        <label>Cooperative (if you belong to one)</label>
+        <input name="cooperative">
+        <label>Estimated tomato harvest per season (kg)</label>
+        <div class="cols">
+          <div><input name="seasonA" type="number" min="0" placeholder="Season A"></div>
+          <div><input name="seasonB" type="number" min="0" placeholder="Season B"></div>
+        </div>
+        <div style="margin-top:10px"><input name="seasonC" type="number" min="0" placeholder="Season C"></div>
+        <p class="hint">Fill in every season you grow tomatoes. Leave the others empty.</p>
+        <div class="err" id="err"></div>
+        <button class="btn wide">Save changes</button>
+      </form>
+    </div>
+  </main>
+  <div id="ftr"></div>
+  <script src="common.js"></script>
+  <script>
+(async () => {
+  const me = await boot(['farmer']);
+  if (!me) return;
+  const f = $('#form'), p = me.profile || {}, s = p.seasons || {};
+  $('#banner').innerHTML = statusBanner(me);
+  $('#name').value = me.name; $('#email').value = me.email; $('#loc').value = p.location || '';
+  f.channel.value = me.notificationChannel || 'email'; f.phone.value = me.phone || ''; f.cooperative.value = p.cooperative || '';
+  f.seasonA.value = s.A || ''; f.seasonB.value = s.B || ''; f.seasonC.value = s.C || '';
+  f.onsubmit = async e => {
+    e.preventDefault(); $('#err').textContent = '';
+    try {
+      await api('profile', { method: 'PUT', body: { phone: f.phone.value, cooperative: f.cooperative.value,
+        seasons: { A: f.seasonA.value, B: f.seasonB.value, C: f.seasonC.value } } });
+      await api('notifications', { method: 'PUT', body: { channel: f.channel.value } });
+      toast('Profile saved.');
+    } catch (err) { $('#err').textContent = err.message; }
+  };
+})();
+  </script>
+</body>
+</html>

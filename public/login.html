@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUZA – Sign in</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="auth">
+    <div class="side">
+      <h2>Fresh tomatoes, planned before harvest.</h2>
+      <p>Sign in to forecast a harvest, reserve produce, or follow a delivery.</p>
+    </div>
+    <div class="form">
+      <div class="box">
+        <div class="tabs" id="tabs">
+          <button data-m="login" class="on">Sign in</button>
+          <button data-m="register">Create account</button>
+        </div>
+        <form id="f">
+          <div id="regOnly">
+            <div class="free">Creating an account is free. KUZA reviews every new account before it can start transacting.</div>
+            <label>I am a</label>
+            <div class="roles">
+              <label><input type="radio" name="role" value="farmer"><span>Farmer</span></label>
+              <label><input type="radio" name="role" value="buyer" checked><span>Business</span></label>
+            </div>
+            <label id="nameLbl">Business name</label>
+            <input name="name" autocomplete="organization">
+
+            <div id="buyerOnly">
+              <label>Type of business</label>
+              <select name="businessType"><option>Restaurant</option><option>Hotel</option><option>Retailer or supermarket</option><option>Market trader</option><option>Processor</option><option>Other</option></select>
+              <label>Contact person</label>
+              <input name="contactPerson" autocomplete="name">
+              <label>Website (if you have one)</label>
+              <input name="website" placeholder="www.example.rw">
+            </div>
+
+            <label>Province</label><select id="prov"></select>
+            <label>District</label><select id="dist"></select>
+            <label>Sector</label><input id="sector" list="sectorList" autocomplete="off" placeholder="Pick or type"><datalist id="sectorList"></datalist>
+            <div id="buyerLoc"><label>Street or area (business address)</label><input name="address" autocomplete="street-address"></div>
+
+            <div id="farmerOnly">
+              <label>Cell</label><input id="cell" list="cellList" autocomplete="off" placeholder="Pick or type"><datalist id="cellList"></datalist>
+              <label>Cooperative (if you belong to one)</label>
+              <input name="cooperative">
+              <label>Estimated tomato harvest per season (kg)</label>
+              <div class="cols">
+                <div><input name="seasonA" type="number" min="0" placeholder="Season A"></div>
+                <div><input name="seasonB" type="number" min="0" placeholder="Season B"></div>
+              </div>
+              <div style="margin-top:10px"><input name="seasonC" type="number" min="0" placeholder="Season C"></div>
+              <p class="hint">Fill in every season you grow tomatoes. Leave the others empty.</p>
+              <label>Photos of your farm (1 to 4)</label>
+              <input id="photos" type="file" accept="image/*" multiple>
+              <div class="thumbs" id="prev"></div>
+            </div>
+
+            <label>Phone number</label>
+            <input name="phone" type="tel" autocomplete="tel" placeholder="+250 ...">
+
+            <label>Send me updates by</label>
+            <select name="notificationChannel"><option value="email">Email</option><option value="sms">Phone (SMS)</option></select>
+          </div>
+          <label>Email</label>
+          <input name="email" type="email" autocomplete="email" required>
+          <label>Password</label>
+          <input name="password" type="password" autocomplete="current-password" required>
+          <div class="err" id="err"></div>
+          <button class="btn wide" id="go">Sign in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div id="ftr"></div>
+  <script src="common.js"></script>
+  <script>
+    let mode = 'login', photos = [];
+    const f = $('#f'), q = new URLSearchParams(location.search);
+    const role = () => f.querySelector('[name=role]:checked').value;
+
+    function layout() {
+      const reg = mode === 'register', farmer = role() === 'farmer';
+      document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
+      $('#regOnly').style.display = reg ? 'block' : 'none';
+      $('#farmerOnly').style.display = reg && farmer ? 'block' : 'none';
+      $('#buyerOnly').style.display = $('#buyerLoc').style.display = reg && !farmer ? 'block' : 'none';
+      $('#nameLbl').textContent = farmer ? 'Your full name' : 'Business name';
+      $('#go').textContent = reg ? 'Create account' : 'Sign in';
+      f.password.autocomplete = reg ? 'new-password' : 'current-password';
+      if (reg) f.password.setAttribute('minlength', '8'); else f.password.removeAttribute('minlength');
+      $('#err').textContent = '';
+    }
+    document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { mode = b.dataset.m; layout(); });
+    f.querySelectorAll('[name=role]').forEach(r => r.onchange = layout);
+
+    // Resize photos in the browser before they are sent
+    $('#photos').onchange = async e => {
+      try {
+        photos = await Promise.all([...e.target.files].slice(0, 4).map(file => shrink(file)));
+        $('#prev').innerHTML = photos.map(p => `<img src="${p}" alt="">`).join('');
+      } catch (err) { photos = []; $('#prev').innerHTML = ''; $('#err').textContent = err.message; }
+    };
+
+    function goNext(user) {
+      const next = q.get('next');
+      if (next && /^[\w-]+\.html$/.test(next)) return location.href = next;
+      location.href = { farmer: 'farmer.html', buyer: 'buyer.html', ops: 'ops.html', agent: 'agent.html', coldroom: 'coldroom.html' }[user.role];
+    }
+
+    f.onsubmit = async e => {
+      e.preventDefault();
+      $('#err').textContent = '';
+      const v = Object.fromEntries(new FormData(f));
+      let body = { email: v.email, password: v.password };
+      if (mode === 'register') {
+        const farmer = role() === 'farmer';
+        body = { ...body, role: role(), name: v.name, phone: v.phone, notificationChannel: f.notificationChannel.value,
+          profile: { province: $('#prov').value, district: $('#dist').value, sector: $('#sector').value,
+            ...(farmer ? { cell: $('#cell').value, cooperative: v.cooperative, seasons: { A: v.seasonA, B: v.seasonB, C: v.seasonC } }
+                       : { businessType: v.businessType, contactPerson: v.contactPerson, website: v.website, address: v.address }) },
+          photos: farmer ? photos : [] };
+      }
+      try { goNext((await api(mode, { body })).user); }
+      catch (err) { $('#err').textContent = err.message; }
+    };
+
+    (async () => {
+      const me = await boot();
+      mode = q.get('mode') === 'register' ? 'register' : 'login';
+      if (['farmer', 'buyer'].includes(q.get('role'))) f.querySelector(`[name=role][value=${q.get('role')}]`).checked = true;
+      layout();                       // sign-in works even if the location list fails to load
+      if (me) return goNext(me);
+      try { await initPlaces({ prov: 'prov', dist: 'dist', sector: 'sector', cell: 'cell', sectorList: 'sectorList', cellList: 'cellList' }); }
+      catch (err) { console.error(err); toast('Could not load the location list. Sign in still works; reload before creating an account.', true); }
+    })();
+  </script>
+</body>
+</html>

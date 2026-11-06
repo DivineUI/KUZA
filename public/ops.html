@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUZA – Operations</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="wrap dash">
+    <h1 style="font-size:clamp(28px,4vw,40px)">Operations</h1>
+    <p class="muted">Record deposits, arrange storage, and move each delivery forward.</p>
+    <div class="tabs" id="mainTabs"><button data-v="orders" class="on">Orders</button><button data-v="apps" id="appsTab">Applications</button></div>
+    <section id="appsView" style="display:none">
+      <div class="tabs" id="appFilter"><button data-s="pending" class="on">Pending</button><button data-s="approved">Approved</button><button data-s="rejected">Rejected</button></div>
+      <div class="grid" id="apps"></div>
+    </section>
+    <section id="ordersView">
+    <div class="stats" id="stats"></div>
+    <div class="two">
+      <div class="card">
+        <h3>Rules and fees</h3>
+        <p class="meta">Placeholders until your team decides. Changes apply to new orders.</p>
+        <form id="set">
+          <label>Buyer deposit (%)</label><input name="depositPercent" type="number" min="0" max="100" step="0.5">
+          <label>KUZA service fee (%)</label><input name="serviceFeePercent" type="number" min="0" max="100" step="0.5">
+          <label>Forecast margin of error (%)</label><input name="forecastMarginPercent" type="number" min="0" max="100" step="0.5">
+          <button class="btn wide" style="margin-top:18px">Save settings</button>
+        </form>
+      </div>
+      <div><h3>Orders</h3><div class="stack" id="orders"></div></div>
+    </div>
+    </section>
+    <section class="card" style="margin-top:26px"><div class="row"><h3>Certified agents</h3><button class="btn ghost sm" id="newAgent">Add certified agent</button></div>
+      <p class="meta">Agents get their own account and check farm quality.</p><div class="stack" id="agents"></div></section>
+    <section class="card" style="margin-top:26px"><div class="row"><h3>Cold rooms</h3><button class="btn ghost sm" id="newCold">Add cold-room account</button></div>
+      <p class="meta">Each cold-room partner (for example Cold Solutions Rwanda) gets its own account to confirm storage requests.</p><div class="stack" id="rooms"></div>
+      <h4 style="margin:16px 0 4px">Storage requests</h4><div class="stack" id="cold"></div></section>
+  </main>
+  <div id="ftr"></div>
+  <script src="common.js"></script>
+  <script>
+(async () => {
+  const me = await boot(['ops']);
+  if (!me) return;
+
+  const next = m => { const f = FLOW[m.transport], i = f.indexOf(m.status); return (i >= 2 && i < f.length - 2) ? f[i + 1] : null; };
+
+  function actions(m) {
+    if (['Completed', 'Cancelled'].includes(m.status)) return '';
+    const f = FLOW[m.transport], waiting = m.status === f[f.length - 2], b = [];
+    if (m.status === 'Deposit pending verification') b.push(['approve-deposit', 'Approve deposit', ''], ['proof', 'View payment proof', '']);
+    if (m.status === 'Deposit paid') b.push(['confirm', 'Farmer confirmed quantity', '']);
+    if (next(m)) b.push(['advance', 'Mark: ' + next(m), '']);
+    if (!m.storage.needed) b.push(['storage', 'Arrange storage', 'amb']);
+    if (!waiting) b.push(['cancel', 'Cancel order', 'red']);
+    return `<div class="actions">${b.map(x => `<button class="btn ${x[2]}" data-a="${x[0]}" data-id="${m.id}" data-kg="${m.quantityKg}">${x[1]}</button>`).join('')}</div>` +
+      (waiting ? '<p class="meta">Delivered. Waiting for the buyer to confirm receipt and payment.</p>' : '');
+  }
+
+  async function refresh() {
+    const [matches, settings] = await Promise.all([api('matches'), api('settings')]);
+    for (const k in settings) $('#set')[k].value = settings[k];
+    const count = fn => matches.filter(fn).length;
+    $('#stats').innerHTML = [
+      [matches.length, 'Orders'], [count(m => m.status === 'Deposit pending verification'), 'Awaiting deposit'],
+      [count(m => ['Harvested', 'Picked up', 'In transit', 'Collected by buyer'].includes(m.status)), 'In progress'],
+      [count(m => m.status === 'Completed'), 'Completed']
+    ].map(s => `<div class="card stat"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('');
+
+    $('#orders').innerHTML = matches.length ? matches.map(m => `<div class="card">
+      <div class="row"><div><h3>${esc(m.buyerName)} · ${esc(m.quantityKg)} kg</h3>
+        <div class="meta">Farmer: ${esc(m.farmerName)} · ${esc(m.location)}</div>
+        <div class="meta">Harvest ${esc(m.harvestDate)} · ${m.transport === 'buyer-collects' ? 'Buyer collects' : 'KUZA transport'}${m.storage.needed ? ' · storage ' + rwf(m.storage.cost) : ''}</div>
+        <div class="meta">Total ${rwf(m.totalValue)} · deposit ${rwf(m.depositAmount)}${m.depositSurplus > 0 ? ` (RWF ${Number(m.depositSurplus).toLocaleString('en-US')} surplus to settle)` : ''} · KUZA fee ${rwf(m.serviceFee)}</div>
+        ${m.depositOutcome ? `<div class="meta" style="color:var(--red)">Deposit: ${esc(m.depositOutcome)}</div>` : ''}</div>
+        <span class="badge ${m.status === 'Completed' ? 'ok' : ''}">${esc(m.status)}</span></div>
+      ${timeline(m)}${actions(m)}${historyHtml(m)}</div>`).join('')
+      : '<div class="card empty">No orders yet.</div>';
+  }
+
+  $('#orders').onclick = async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    const id = b.dataset.id;
+    try {
+      if (b.dataset.a === 'proof') return window.open(`/api/matches/${id}/proof`, '_blank');
+      if (b.dataset.a === 'approve-deposit') { await api(`matches/${id}/approve-deposit`, { body: {} }); toast('Deposit approved.'); }
+      if (b.dataset.a === 'advance') { await api(`matches/${id}/advance`, { body: {} }); toast('Delivery updated.'); }
+      if (b.dataset.a === 'confirm') {
+        const v = await ask('Confirm quantity', [{ label: 'Kilograms confirmed by the farmer', name: 'kg', type: 'number', value: b.dataset.kg, min: 1, max: b.dataset.kg }], 'Confirm');
+        if (!v) return;
+        await api(`matches/${id}/confirm`, { body: { confirmedKg: v.kg } }); toast('Quantity confirmed.');
+      }
+      if (b.dataset.a === 'storage') {
+        const v = await ask('Arrange temporary storage', [{ label: 'Storage cost (RWF)', name: 'cost', type: 'number', value: 0, min: 0 }], 'Save');
+        if (!v) return;
+        await api(`matches/${id}/storage`, { body: { storageCost: v.cost } }); toast('Storage recorded.');
+      }
+      if (b.dataset.a === 'cancel') {
+        const v = await ask('Cancel order', [{ label: 'Who is cancelling?', name: 'by', options: [['buyer', 'The buyer'], ['farmer', 'The farmer']] }, { label: 'Reason (optional)', name: 'reason' }], 'Cancel order');
+        if (!v) return;
+        await api(`matches/${id}/cancel`, { body: { cancelledBy: v.by, reason: v.reason } }); toast('Order cancelled.');
+      }
+      refresh();
+    } catch (err) { toast(err.message, true); }
+  };
+
+  $('#set').onsubmit = async e => {
+    e.preventDefault();
+    try { await api('settings', { method: 'PUT', body: Object.fromEntries(new FormData(e.target)) }); toast('Settings saved.'); }
+    catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- Account applications ----------
+  let users = [], filter = 'pending';
+  const seasons = p => Object.entries(p.seasons || {}).map(([k, kg]) => `Season ${k}: ${Number(kg).toLocaleString()} kg`).join(' · ') || 'None given';
+
+  async function loadUsers() {
+    users = await api('users');
+    const n = users.filter(u => u.status === 'pending').length;
+    $('#appsTab').textContent = 'Applications' + (n ? ` (${n})` : '');
+    drawUsers();
+  }
+  function drawUsers() {
+    document.querySelectorAll('#appFilter button').forEach(b => b.classList.toggle('on', b.dataset.s === filter));
+    const list = users.filter(u => (u.status || 'approved') === filter);
+    $('#apps').innerHTML = list.length ? list.map(u => {
+      const p = u.profile || {}, farmer = u.role === 'farmer';
+      const site = p.website && /^https?:\/\//i.test(p.website) ? `<a href="${esc(p.website)}" target="_blank" rel="noopener">${esc(p.website)}</a>` : '';
+      return `<div class="card"><div class="row"><div><h3>${esc(u.name)}</h3>
+        <div class="meta">${farmer ? 'Farmer' : 'Business' + (p.businessType ? ' · ' + esc(p.businessType) : '')} · applied ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ''}</div></div>
+        <span class="badge ${u.status === 'approved' ? 'ok' : u.status === 'rejected' ? 'no' : ''}">${esc(u.status)}</span></div>
+        <div class="meta">Phone: ${esc(u.phone)} · ${esc(u.email)}</div>
+        ${farmer ? `<div class="meta">Location: ${esc(p.location)}</div><div class="meta">Cooperative: ${esc(p.cooperative || 'None')}</div><div class="meta">Estimated harvest: ${esc(seasons(p))}</div>
+          <div class="thumbs">${Array.from({ length: p.photos || 0 }, (_, i) => `<a href="/api/users/${u.id}/photo/${i}" target="_blank"><img src="/api/users/${u.id}/photo/${i}" alt="Farm photo ${i + 1}"></a>`).join('')}</div>`
+        : `<div class="meta">Contact person: ${esc(p.contactPerson)}</div><div class="meta">Location: ${esc(p.location)}</div>${site ? `<div class="meta">Website: ${site}</div>` : ''}`}
+        ${u.rejectionReason ? `<div class="meta" style="color:var(--red)">Reason: ${esc(u.rejectionReason)}</div>` : ''}
+        <div class="actions">${u.status !== 'approved' ? `<button class="btn" data-u="approve" data-id="${u.id}">Approve</button>` : ''}${u.status !== 'rejected' ? `<button class="btn red" data-u="reject" data-id="${u.id}">${u.status === 'approved' ? 'Revoke access' : 'Reject'}</button>` : ''}</div></div>`;
+    }).join('') : `<div class="card empty" style="grid-column:1/-1">No ${filter} accounts.</div>`;
+  }
+  $('#appFilter').onclick = e => { const b = e.target.closest('[data-s]'); if (b) { filter = b.dataset.s; drawUsers(); } };
+  $('#apps').onclick = async e => {
+    const b = e.target.closest('[data-u]'); if (!b) return;
+    try {
+      if (b.dataset.u === 'approve') { await api(`users/${b.dataset.id}/approve`, { body: {} }); toast('Account approved.'); }
+      else {
+        const v = await ask('Reject or revoke this account?', [{ label: 'Reason (shown to the user)', name: 'reason' }], 'Confirm');
+        if (!v) return;
+        await api(`users/${b.dataset.id}/reject`, { body: { reason: v.reason } }); toast('Account updated.');
+      }
+      loadUsers();
+    } catch (err) { toast(err.message, true); }
+  };
+  $('#mainTabs').onclick = e => {
+    const b = e.target.closest('[data-v]'); if (!b) return;
+    document.querySelectorAll('#mainTabs button').forEach(x => x.classList.toggle('on', x === b));
+    $('#ordersView').style.display = b.dataset.v === 'orders' ? '' : 'none';
+    $('#appsView').style.display = b.dataset.v === 'apps' ? '' : 'none';
+  };
+
+  refresh();
+  loadUsers();
+})();
+  </script>
+<script>
+(async () => {
+  const me = await boot(['ops']); if (!me) return;
+  async function cold() {
+    const hs = (await api('harvests')).filter(h => h.storage);
+    $('#cold').innerHTML = hs.length ? hs.map(h => `<div class="row"><div><b>${esc(h.farmerName)} · ${esc(h.expectedKg)} kg</b><div class="meta">${esc(h.location)} · ${esc(h.storage.status)}${h.storage.facility ? ' · ' + esc(h.storage.facility) : ''}</div></div>
+      ${h.storage.status === 'Requested' ? `<button class="btn sm" data-s="${h.id}">Confirm cold room</button>` : '<span class="badge ok">In cold room</span>'}</div>`).join('') : '<div class="meta">No storage requests yet.</div>';
+  }
+  $('#cold').onclick = async e => {
+    const b = e.target.closest('[data-s]'); if (!b) return;
+    const v = await ask('Confirm cold room', [{ label: 'Facility', name: 'facility', value: 'Cold Solutions Rwanda, Kigali' }, { label: 'Cost per kg per day (RWF)', name: 'costPerKgPerDay', type: 'number', value: 0, min: 0 }], 'Confirm');
+    if (!v) return;
+    try { await api(`harvests/${b.dataset.s}/storage`, { body: v }); toast('Cold room confirmed.'); cold(); } catch (err) { toast(err.message, true); }
+  };
+  async function partners() {
+    const p = await api('partners'), row = u => `<div class="row"><div><b>${esc(u.name)}</b><div class="meta">${esc(u.email)}${u.profile && u.profile.facility ? ' · ' + esc(u.profile.facility) : ''}</div></div></div>`;
+    $('#agents').innerHTML = p.filter(u => u.role === 'agent').map(row).join('') || '<div class="meta">No agents yet.</div>';
+    $('#rooms').innerHTML = p.filter(u => u.role === 'coldroom').map(row).join('') || '<div class="meta">No cold-room accounts yet.</div>';
+  }
+  $('#newCold').onclick = async () => {
+    const v = await ask('Add cold-room account', [{ label: 'Facility name', name: 'facility', value: 'Cold Solutions Rwanda, Kigali' }, { label: 'Contact person', name: 'name' }, { label: 'Email', name: 'email', type: 'email' }, { label: 'Phone', name: 'phone', type: 'tel' }, { label: 'Temporary password (8+ characters)', name: 'password', type: 'password' }], 'Create account');
+    if (!v) return;
+    try { await api('coldrooms', { body: v }); toast('Cold-room account created.'); partners(); } catch (err) { toast(err.message, true); }
+  };
+  $('#newAgent').onclick = async () => {
+    const v = await ask('Add certified agent', [{ label: 'Full name', name: 'name' }, { label: 'Email', name: 'email', type: 'email' }, { label: 'Phone', name: 'phone', type: 'tel' }, { label: 'Temporary password (8+ characters)', name: 'password', type: 'password' }], 'Create agent');
+    if (!v) return;
+    try { await api('agents', { body: v }); toast('Agent account created.'); partners(); } catch (err) { toast(err.message, true); }
+  };
+  cold(); partners();
+})();
+</script></body>
+</html>
