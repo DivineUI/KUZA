@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KUZA – Farmer dashboard</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div id="hdr"></div>
   <main class="wrap dash">
@@ -20,142 +22,272 @@
         <form id="form">
           <label>Province</label>
           <select name="province" id="province" required></select>
+
           <label>District</label>
           <select name="district" id="district" required></select>
+
           <label>Sector</label>
           <input name="sector" id="sector" list="sectorList" autocomplete="off" placeholder="Pick or type your sector">
           <datalist id="sectorList"></datalist>
+
           <label>Cell</label>
           <input name="cell" id="cell" list="cellList" autocomplete="off" placeholder="Pick or type your cell">
           <datalist id="cellList"></datalist>
+
           <label>Expected harvest (kg)</label>
           <input name="expectedKg" type="number" min="1" required>
+
           <label>Expected harvest date</label>
           <input name="harvestDate" type="date" required>
+
           <label>Expected quality</label>
-          <select name="quality"><option>Grade A</option><option>Grade B</option></select>
-          <label>Your asking price per kg (RWF, optional)</label>
-          <input name="askingPrice" type="number" min="1" required>
+          <select name="quality">
+            <option>Grade A</option>
+            <option>Grade B</option>
+          </select>
+
+          <label>Your asking price per kg (RWF)</label>
+          <input name="askingPrice" type="number" min="1" step="0.01" required placeholder="Enter your price per kg">
+
           <div class="err" id="err"></div>
           <button class="btn wide">Save forecast</button>
         </form>
       </div>
+
       <div>
         <h3>Buyer orders</h3>
         <div class="stack" id="orders"></div>
+
         <h3 style="margin-top:30px">Your forecasts</h3>
         <div class="stack" id="list"></div>
       </div>
     </div>
   </main>
+
   <div id="ftr"></div>
   <script src="common.js"></script>
+
   <script>
-(async () => {
-  const me = await boot(['farmer']);
-  if (!me) return;
-  $('#hello').textContent = `Hello, ${me.name}`;
-  $('#banner').innerHTML = statusBanner(me);
-  if (me.status !== 'approved') document.querySelectorAll('#form input, #form select, #form button').forEach(x => x.disabled = true);
+    (async () => {
+      const me = await boot(['farmer']);
+      if (!me) return;
 
-  const provinceEl = $('#province'), districtEl = $('#district'), sectorEl = $('#sector'), cellEl = $('#cell');
-  let places = {};
+      $('#hello').textContent = `Hello, ${me.name}`;
+      $('#banner').innerHTML = statusBanner(me);
 
-  // ---------- Province > district > sector > cell ----------
-  const fillSelect = (el, items, ph) => el.innerHTML = `<option value="">${ph}</option>` + items.map(i => `<option>${esc(i)}</option>`).join('');
-  const fillList = (id, items) => $('#' + id).innerHTML = items.map(i => `<option value="${esc(i)}">`).join('');
-  const sectorsOf = () => (places[provinceEl.value] || {})[districtEl.value] || {};
-  function resetPlaces() {
-    fillSelect(provinceEl, Object.keys(places), 'Select province');
-    fillSelect(districtEl, [], 'Select province first');
-    fillList('sectorList', []); fillList('cellList', []);
-  }
-  provinceEl.onchange = () => {
-    fillSelect(districtEl, Object.keys(places[provinceEl.value] || {}), 'Select district');
-    sectorEl.value = cellEl.value = '';
-    fillList('sectorList', []); fillList('cellList', []);
-  };
-  districtEl.onchange = () => {
-    sectorEl.value = cellEl.value = '';
-    fillList('sectorList', Object.keys(sectorsOf())); fillList('cellList', []);
-  };
-  sectorEl.oninput = () => fillList('cellList', sectorsOf()[sectorEl.value] || []);
+      if (me.status !== 'approved') {
+        document.querySelectorAll('#form input, #form select, #form button')
+          .forEach(x => x.disabled = true);
+      }
 
-  // ---------- Page data ----------
-  async function refresh() {
-    const [harvests, matches] = await Promise.all([api('harvests?mine=1'), api('matches')]);
-    const live = matches.filter(m => m.status !== 'Cancelled');
-    const open = matches.filter(m => m.status === 'Deposit paid').length;
-    $('#stats').innerHTML = [
-      [harvests.length, 'Forecasts'],
-      [harvests.reduce((s, h) => s + h.expectedKg, 0).toLocaleString() + ' kg', 'Expected harvest'],
-      [live.reduce((s, m) => s + m.quantityKg, 0).toLocaleString() + ' kg', 'Reserved by buyers'],
-      [open, 'Waiting for your confirmation'],
-      [(harvests[0] ? harvests[0].trust : 50) + '/100', 'Your trust score']
-    ].map(s => `<div class="card stat"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('');
+      const provinceEl = $('#province');
+      const districtEl = $('#district');
+      const sectorEl = $('#sector');
+      const cellEl = $('#cell');
 
-    $('#orders').innerHTML = matches.length ? matches.map(m => {
-      const f = FLOW[m.transport], closed = ['Completed', 'Cancelled', f[f.length - 2]].includes(m.status);
-      return `<div class="card"><div class="row"><div><h3>${esc(m.buyerName)} · ${esc(m.quantityKg)} kg</h3>
-        <div class="meta">${rwf(m.pricePerKg)} per kg · ${rwf(m.totalValue)} total</div>
-        <div class="meta">${esc(m.location)} · harvest ${esc(m.harvestDate)}</div></div>
-        <span class="badge ${m.status === 'Completed' ? 'ok' : ''}">${esc(m.status)}</span></div>
+      let places = {};
+
+      // ---------- Province > district > sector > cell ----------
+      const fillSelect = (el, items, ph) =>
+        el.innerHTML = `<option value="">${ph}</option>` +
+        items.map(i => `<option>${esc(i)}</option>`).join('');
+
+      const fillList = (id, items) =>
+        $('#' + id).innerHTML = items.map(i => `<option value="${esc(i)}">`).join('');
+
+      const sectorsOf = () =>
+        (places[provinceEl.value] || {})[districtEl.value] || {};
+
+      function resetPlaces() {
+        fillSelect(provinceEl, Object.keys(places), 'Select province');
+        fillSelect(districtEl, [], 'Select province first');
+        fillList('sectorList', []);
+        fillList('cellList', []);
+      }
+
+      provinceEl.onchange = () => {
+        fillSelect(
+          districtEl,
+          Object.keys(places[provinceEl.value] || {}),
+          'Select district'
+        );
+
+        sectorEl.value = cellEl.value = '';
+        fillList('sectorList', []);
+        fillList('cellList', []);
+      };
+
+      districtEl.onchange = () => {
+        sectorEl.value = cellEl.value = '';
+        fillList('sectorList', Object.keys(sectorsOf()));
+        fillList('cellList', []);
+      };
+
+      sectorEl.oninput = () =>
+        fillList('cellList', sectorsOf()[sectorEl.value] || []);
+
+      // ---------- Page data ----------
+      async function refresh() {
+        const [harvests, matches] = await Promise.all([
+          api('harvests?mine=1'),
+          api('matches')
+        ]);
+
+        const live = matches.filter(m => m.status !== 'Cancelled');
+        const open = matches.filter(m => m.status === 'Deposit paid').length;
+
+        $('#stats').innerHTML = [
+          [harvests.length, 'Forecasts'],
+          [harvests.reduce((s, h) => s + h.expectedKg, 0).toLocaleString() + ' kg', 'Expected harvest'],
+          [live.reduce((s, m) => s + m.quantityKg, 0).toLocaleString() + ' kg', 'Reserved by buyers'],
+          [open, 'Waiting for your confirmation'],
+          [(harvests[0] ? harvests[0].trust : 50) + '/100', 'Your trust score']
+        ].map(s =>
+          `<div class="card stat"><b>${s[0]}</b><span>${s[1]}</span></div>`
+        ).join('');
+
+        $('#orders').innerHTML = matches.length ? matches.map(m => {
+          const f = FLOW[m.transport];
+          const closed = ['Completed', 'Cancelled', f[f.length - 2]].includes(m.status);
+
+          return `<div class="card">
+        <div class="row">
+          <div>
+            <h3>${esc(m.buyerName)} · ${esc(m.quantityKg)} kg</h3>
+            <div class="meta">${rwf(m.pricePerKg)} per kg · ${rwf(m.totalValue)} total</div>
+            <div class="meta">${esc(m.location)} · harvest ${esc(m.harvestDate)}</div>
+          </div>
+          <span class="badge ${m.status === 'Completed' ? 'ok' : ''}">${esc(m.status)}</span>
+        </div>
         ${timeline(m)}
         ${m.status === 'Deposit pending verification' ? '<p class="meta">Waiting for KUZA to verify the buyer\'s deposit.</p>' : ''}
         <div class="meta">KUZA commission (5%): <b>${rwf(m.farmerCommission || 0)}</b> · you receive <b>${rwf(m.farmerNet || 0)}</b></div>
         <div class="actions">
           ${m.status === 'Deposit paid' ? `<button class="btn" data-a="confirm" data-id="${m.id}" data-kg="${m.quantityKg}">Confirm quantity</button>` : ''}
           ${closed ? '' : `<button class="btn ghost" data-a="cancel" data-id="${m.id}">Cancel order</button>`}
-        </div>${historyHtml(m)}</div>`;
-    }).join('') : '<div class="card empty">No orders yet. Buyers will reserve your tomatoes once you add a forecast.</div>';
+        </div>
+        ${historyHtml(m)}
+      </div>`;
+        }).join('') : '<div class="card empty">No orders yet. Buyers will reserve your tomatoes once you add a forecast.</div>';
 
-    $('#list').innerHTML = harvests.length ? harvests.slice().reverse().map(h => {
-      const taken = h.expectedKg - h.remainingKg, pct = Math.min(100, Math.round(taken / h.expectedKg * 100));
-      return `<div class="card"><div class="row"><h3>${esc(h.expectedKg)} kg tomatoes</h3><span class="tag">${esc(h.quality)}</span></div>
-        <div class="meta">${esc(h.location)}</div><div class="meta">Harvest on ${esc(h.harvestDate)}${h.askingPrice ? ' · asking ' + rwf(h.askingPrice) + ' per kg' : ''}</div>
+        $('#list').innerHTML = harvests.length ? harvests.slice().reverse().map(h => {
+          const taken = h.expectedKg - h.remainingKg;
+          const pct = Math.min(100, Math.round(taken / h.expectedKg * 100));
+
+          return `<div class="card">
+        <div class="row">
+          <h3>${esc(h.expectedKg)} kg tomatoes</h3>
+          <span class="tag">${esc(h.quality)}</span>
+        </div>
+        <div class="meta">${esc(h.location)}</div>
+        <div class="meta">Harvest on ${esc(h.harvestDate)}${h.askingPrice ? ' · asking ' + rwf(h.askingPrice) + ' per kg' : ''}</div>
         <div class="meta">${h.verified ? `Agent check: <b>${esc(h.verified.grade)}</b> · ${esc(h.verified.measuredKg)} kg measured` : 'Waiting for a certified agent to check quality'}</div>
         ${h.storage ? `<div class="meta"><span class="badge ${h.storage.status === 'In cold room' ? 'ok' : ''}">Cold room: ${esc(h.storage.status)}</span> ${esc(h.storage.facility || '')}</div>` : (h.harvestDate <= new Date().toISOString().slice(0, 10) && h.remainingKg > 0 ? `<button class="btn amb sm" data-store="${h.id}" style="margin-top:8px">Harvested, no buyer yet? Store in a cold room</button>` : '')}
-        <div class="bar2"><i style="width:${pct}%"></i></div><div class="meta">${taken} kg reserved · ${h.remainingKg} kg still available</div></div>`;
-    }).join('') : '<div class="card empty">No forecasts yet. Add your first one on the left.</div>';
-  }
-
-  // ---------- Actions ----------
-  $('#orders').onclick = async e => {
-    const b = e.target.closest('[data-a]'); if (!b) return;
-    try {
-      if (b.dataset.a === 'confirm') {
-        const v = await ask('Confirm your final quantity', [{ label: 'Kilograms you can supply', name: 'kg', type: 'number', value: b.dataset.kg, min: 1, max: b.dataset.kg }], 'Confirm');
-        if (!v) return;
-        await api(`matches/${b.dataset.id}/confirm`, { body: { confirmedKg: v.kg } });
-        toast('Quantity confirmed.');
-      } else {
-        const v = await ask('Cancel this order?', [{ label: 'Reason (optional)', name: 'reason' }], 'Cancel order');
-        if (!v) return;
-        await api(`matches/${b.dataset.id}/cancel`, { body: { reason: v.reason } });
-        toast('Order cancelled.');
+        <div class="bar2"><i style="width:${pct}%"></i></div>
+        <div class="meta">${taken} kg reserved · ${h.remainingKg} kg still available</div>
+      </div>`;
+        }).join('') : '<div class="card empty">No forecasts yet. Add your first one on the left.</div>';
       }
+
+      // ---------- Actions ----------
+      $('#orders').onclick = async e => {
+        const b = e.target.closest('[data-a]');
+        if (!b) return;
+
+        try {
+          if (b.dataset.a === 'confirm') {
+            const v = await ask(
+              'Confirm your final quantity',
+              [{
+                label: 'Kilograms you can supply',
+                name: 'kg',
+                type: 'number',
+                value: b.dataset.kg,
+                min: 1,
+                max: b.dataset.kg
+              }],
+              'Confirm'
+            );
+
+            if (!v) return;
+
+            await api(`matches/${b.dataset.id}/confirm`, {
+              body: { confirmedKg: v.kg }
+            });
+
+            toast('Quantity confirmed.');
+          } else {
+            const v = await ask(
+              'Cancel this order?',
+              [{ label: 'Reason (optional)', name: 'reason' }],
+              'Cancel order'
+            );
+
+            if (!v) return;
+
+            await api(`matches/${b.dataset.id}/cancel`, {
+              body: { reason: v.reason }
+            });
+
+            toast('Order cancelled.');
+          }
+
+          refresh();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+
+      $('#list').onclick = async e => {
+        const b = e.target.closest('[data-store]');
+        if (!b) return;
+
+        try {
+          await api(`harvests/${b.dataset.store}/store`, { body: {} });
+          toast('Request sent. KUZA will arrange cold-room space.');
+          refresh();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+
+      // ---------- Save forecast ----------
+      $('#form').onsubmit = async e => {
+        e.preventDefault();
+        $('#err').textContent = '';
+
+        const formData = Object.fromEntries(new FormData(e.target));
+        const priceInput = formData.askingPrice;
+        const price = Number(priceInput);
+
+        if (
+          priceInput === undefined ||
+          priceInput.trim() === '' ||
+          !Number.isFinite(price) ||
+          price <= 0
+        ) {
+          $('#err').textContent =
+            'Please enter a valid asking price greater than zero.';
+          return;
+        }
+
+        try {
+          await api('harvests', { body: formData });
+
+          e.target.reset();
+          resetPlaces();
+          toast('Forecast saved.');
+          refresh();
+        } catch (err) {
+          $('#err').textContent = err.message;
+        }
+      };
+
+      places = await (await fetch('rwanda.json')).json();
+      resetPlaces();
       refresh();
-    } catch (err) { toast(err.message, true); }
-  };
-
-  $('#list').onclick = async e => {
-    const b = e.target.closest('[data-store]'); if (!b) return;
-    try { await api(`harvests/${b.dataset.store}/store`, { body: {} }); toast('Request sent. KUZA will arrange cold-room space.'); refresh(); }
-    catch (err) { toast(err.message, true); }
-  };
-
-  $('#form').onsubmit = async e => {
-    e.preventDefault(); $('#err').textContent = '';
-    try {
-      await api('harvests', { body: Object.fromEntries(new FormData(e.target)) });
-      e.target.reset(); resetPlaces(); toast('Forecast saved.'); refresh();
-    } catch (err) { $('#err').textContent = err.message; }
-  };
-
-  places = await (await fetch('rwanda.json')).json();
-  resetPlaces();
-  refresh();
-})();
+    })();
   </script>
 </body>
+
 </html>
