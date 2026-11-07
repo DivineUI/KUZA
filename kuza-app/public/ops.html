@@ -29,11 +29,8 @@
     </section>
 
     <section id="ordersView">
-
-      <!-- PAYMENT NOTIFICATION -->
       <div id="paymentAlert" class="card" style="display:none;border:2px solid #d97706;margin:16px 0" role="status"
         aria-live="polite">
-
         <div class="row">
           <div>
             <h3 style="color:#d97706;margin:0 0 6px">
@@ -87,7 +84,8 @@
         <h3>Cold rooms</h3>
         <button class="btn ghost sm" id="newCold">Add cold-room account</button>
       </div>
-      <p class="meta">Each cold-room partner gets its own account to confirm storage requests.</p>
+      <p class="meta">Each cold-room partner (for example Cold Solutions Rwanda) gets its own account to confirm storage
+        requests.</p>
       <div class="stack" id="rooms"></div>
       <h4 style="margin:16px 0 4px">Storage requests</h4>
       <div class="stack" id="cold"></div>
@@ -160,7 +158,6 @@
 
       async function refresh() {
         if (refreshing) return;
-
         refreshing = true;
 
         try {
@@ -169,25 +166,25 @@
             api('settings')
           ]);
 
-          // Identify orders awaiting payment verification.
+          // Check orders waiting for deposit verification.
           const pendingPayments = matches.filter(
             m => m.status === 'Deposit pending verification'
           );
 
-          // Display the payment notification.
+          // Display payment notification.
           const alert = $('#paymentAlert');
 
           alert.style.display = pendingPayments.length ? 'block' : 'none';
 
           $('#paymentAlertText').textContent = pendingPayments.length
-            ? `${pendingPayments.length} order(s) have payment proof waiting for verification. Please check each proof before approving the deposit.`
-            : '';
+            ? `${pendingPayments.length} order(s) have payment proof waiting for verification. Please open each proof and check it before approving the deposit.`
+            : 'There are no payment proofs waiting for verification.';
 
           $('#paymentAlertCount').textContent = pendingPayments.length
             ? `${pendingPayments.length} pending`
             : '';
 
-          // Display pending payment orders first.
+          // Put orders awaiting payment verification first.
           matches.sort((a, b) => {
             const aPending =
               a.status === 'Deposit pending verification' ? 1 : 0;
@@ -199,16 +196,25 @@
               new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
           });
 
-          // Update settings unless someone is editing the settings form.
-          if (document.activeElement?.form !== $('#set')) {
-            for (const k in settings) {
-              $('#set')[k].value = settings[k];
+          // FIX: Only update settings fields that actually exist.
+          const settingsForm = $('#set');
+
+          if (
+            settingsForm &&
+            document.activeElement?.form !== settingsForm
+          ) {
+            for (const [key, value] of Object.entries(settings || {})) {
+              const field = settingsForm.elements.namedItem(key);
+
+              if (field) {
+                field.value = value ?? '';
+              }
             }
           }
 
+          // Dashboard statistics.
           const count = fn => matches.filter(fn).length;
 
-          // Dashboard statistics.
           $('#stats').innerHTML = [
             [matches.length, 'Orders'],
             [count(m => m.status === 'Deposit pending verification'), 'Awaiting deposit'],
@@ -290,8 +296,7 @@
 
         try {
           if (b.dataset.a === 'proof') {
-            window.open(`/api/matches/${id}/proof`, '_blank');
-            return;
+            return window.open(`/api/matches/${id}/proof`, '_blank');
           }
 
           if (b.dataset.a === 'approve-deposit') {
@@ -519,10 +524,10 @@
 
       $('#appFilter').onclick = e => {
         const b = e.target.closest('[data-s]');
-        if (!b) return;
-
-        filter = b.dataset.s;
-        drawUsers();
+        if (b) {
+          filter = b.dataset.s;
+          drawUsers();
+        }
       };
 
       $('#apps').onclick = async e => {
@@ -580,7 +585,8 @@
       refresh();
       loadUsers();
 
-      // Automatically check for new payment proofs every 10 seconds.
+      // Check for new payment proofs every 10 seconds.
+      // Pause when the browser tab is hidden.
       setInterval(() => {
         if (!document.hidden) refresh();
       }, 10000);
