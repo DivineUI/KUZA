@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KUZA – Cold room</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="hdr"></div>
+<main class="wrap dash"><h1 style="font-size:clamp(28px,4vw,40px)">Cold room requests</h1>
+<p class="muted">Farmers with harvested tomatoes and no buyer yet. Confirm space, and the stock is shown to buyers as ready now.</p>
+<div class="grid" id="q"></div></main><div id="ftr"></div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const me = await boot(['coldroom']); if (!me) return;
+  async function load() {
+    const list = (await api('harvests')).filter(h => h.storage);
+    $('#q').innerHTML = list.length ? list.map(h => `<div class="card"><h3>${esc(h.expectedKg)} kg</h3><div class="meta">${esc(h.location)} · ${esc(h.farmerName)}</div>
+      <div class="meta">${esc(h.storage.status)}${h.storage.facility ? ' · ' + esc(h.storage.facility) : ''}</div>
+      ${h.storage.status === 'Requested' ? `<button class="btn wide" style="margin-top:12px" data-id="${h.id}">Confirm space</button>` : ''}</div>`).join('')
+      : '<div class="card empty" style="grid-column:1/-1">No storage requests.</div>';
+  }
+  $('#q').onclick = async e => {
+    const b = e.target.closest('[data-id]'); if (!b) return;
+    const v = await ask('Confirm cold-room space', [{ label: 'Cost per kg per day (RWF)', name: 'costPerKgPerDay', type: 'number', value: 0, min: 0 }], 'Confirm');
+    if (!v) return;
+    try { await api(`harvests/${b.dataset.id}/storage`, { body: v }); toast('Space confirmed.'); load(); } catch (err) { toast(err.message, true); }
+  };
+  load();
+})();
+</script></body></html>

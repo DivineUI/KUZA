@@ -1,0 +1,7 @@
+node_modules/
+db.json
+db.json.tmp
+uploads/
+.env
+node_modules
+uploads

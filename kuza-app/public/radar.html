@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KUZA – Glut Radar</title><link rel="stylesheet" href="style.css">
+<style>.rb{display:grid;grid-template-columns:110px 1fr 120px;gap:12px;align-items:center;margin:10px 0;font-size:14px}
+.rb .t{height:22px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}.rb .t i{display:block;height:100%;background:var(--g2)}
+.rb .t u{position:absolute;left:0;top:0;height:100%;background:var(--g)}.rb.glut .t i{background:var(--amb)}.rb.glut b{color:var(--red)}</style></head>
+<body><div id="hdr"></div>
+<main class="wrap dash"><h1 style="font-size:clamp(28px,4vw,40px)">Glut Radar</h1>
+<p class="muted">Tomato prices crash when everyone harvests in the same week. KUZA sees forecasts weeks ahead, so we can spot a glut early and steer farmers away from it.</p>
+<div id="advice"></div><div class="stats" id="impact"></div>
+<div class="card"><h3>Forecast harvest by week</h3><p class="meta">Light bar = forecast kg, dark = already reserved by buyers. Amber = glut week.</p><div id="weeks"></div></div>
+</main><div id="ftr"></div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  await boot();
+  const r = await api('radar'), max = Math.max(1, ...r.weeks.map(w => w.supplyKg));
+  $('#advice').innerHTML = r.advice.map(a => `<div class="note"><b>Harvest-timing tip:</b> ${esc(a.message)}</div>`).join('');
+  const i = r.impact;
+  $('#impact').innerHTML = [[i.farmers, 'Farmers forecasting'], [i.forecastKg.toLocaleString() + ' kg', 'Forecast'], [i.reservedKg.toLocaleString() + ' kg', 'Reserved by buyers'],
+    [i.coldRoomKg.toLocaleString() + ' kg', 'Kept fresh in cold rooms'], [i.verifiedBatches, 'Batches quality-checked']].map(s => `<div class="card stat"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('');
+  $('#weeks').innerHTML = r.weeks.length ? r.weeks.map(w => `<div class="rb ${w.glut ? 'glut' : ''}"><span>Week of ${esc(w.week)}</span>
+    <div class="t"><i style="width:${w.supplyKg / max * 100}%"></i><u style="width:${w.reservedKg / max * 100}%"></u></div>
+    <b>${w.supplyKg.toLocaleString()} kg${w.glut ? ' · glut' : ''}</b></div>`).join('') : '<div class="empty">No upcoming forecasts yet.</div>';
+})();
+</script></body></html>
