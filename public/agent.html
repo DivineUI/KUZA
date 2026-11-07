@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KUZA – Quality checks</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="hdr"></div>
+<main class="wrap dash"><h1 style="font-size:clamp(28px,4vw,40px)">Quality checks</h1>
+<p class="muted">Visit the farm or cold room, measure the real quantity and grade, and record it. Buyers see your result.</p>
+<div class="grid" id="q"></div></main><div id="ftr"></div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const me = await boot(['agent', 'ops']); if (!me) return;
+  async function load() {
+    const list = await api('agent/queue');
+    $('#q').innerHTML = list.length ? list.map(h => `<div class="card"><h3>${esc(h.expectedKg)} kg · claimed ${esc(h.quality)}</h3>
+      <div class="meta">${esc(h.location)}</div><div class="meta">${esc(h.farmerName)} · ${esc(h.phone || '')} · harvest ${esc(h.harvestDate)}</div>
+      ${h.storage ? `<div class="meta">Cold room: ${esc(h.storage.status)}</div>` : ''}
+      <button class="btn wide" style="margin-top:12px" data-id="${h.id}" data-kg="${h.expectedKg}">Record check</button></div>`).join('')
+      : '<div class="card empty" style="grid-column:1/-1">Nothing waiting for a check.</div>';
+  }
+  $('#q').onclick = async e => {
+    const b = e.target.closest('[data-id]'); if (!b) return;
+    const v = await ask('Record quality check', [
+      { label: 'Grade', name: 'grade', options: [['Grade A', 'Grade A'], ['Grade B', 'Grade B'], ['Rejected', 'Rejected (not sellable)']] },
+      { label: 'Kilograms measured', name: 'measuredKg', type: 'number', value: b.dataset.kg, min: 0 },
+      { label: 'Note (optional)', name: 'note' }], 'Save check');
+    if (!v) return;
+    try { await api(`harvests/${b.dataset.id}/verify`, { body: v }); toast('Check recorded.'); load(); } catch (err) { toast(err.message, true); }
+  };
+  load();
+})();
+</script></body></html>
